@@ -1,4 +1,17 @@
 \section{Related Work}
 \label{sec:related_work}
 
-The related work of your project~\cite{Dijkstra:SOSP:1967}.
+
+Recent work by \cite{shetty2024aiagents} introduced AIOpsLab, a framework that addresses the lack of standardized platforms for evaluating AI agents. AIOpsLab orchestrates applications, injects faults through chaos engineering, and enables LLM agents to localize and mitigate these faults. This work demonstrated the potential for AI agents to enhance operational resilience of cloud services, traditionally requiring substantial human expertise. 
+While AIOpsLab established the feasibility of LLM-based fault remediation, it operated with minimal constraints on agent actions. Our research extends the AIOpsLab platform by implementing and evaluating safety guardrails. We enhance this foundation with mutable elements tracking and fault-specific command restrictions, addressing critical safety concerns by limiting agent’s capacity. 
+
+While AIOpsLab established the feasibility of LLM-based fault remediation, it operated with minimal constraints on agent actions. Our research extends the AIOpsLab platform by implementing and evaluating safety guardrails. We enhance this foundation with mutable elements tracking and fault-specific command restrictions, addressing critical safety concerns by limiting agent’s capacity. 
+The two main approaches to verify LLM generated outputs. In pre-facto validation, actions are checked and approved before execution, and post-facto validation, actions are allowed to run but their effects are later reviewed or contained.
+While pre-facto validation works to increase the system’s usability, it relies on human input, which limits its feasibility in practice. The GOEX runtime environment \cite{patil2024goexperspectivesdesignsruntime} suggests a promising shift toward post-facto validation using the concepts of undo and damage confinement. Specifically, damage confinement is achieved through coarse-grained access control mechanisms that limit the scope of LLM actions, ensuring they operate only within predefined boundaries and reducing the potential impact of unintended behavior.
+
+(should i tie this back to our work where we implemented a simliar idea of confinment/ restriction)
+
+
+The principle of least knowledge is also used in \cite{shi2025progent} which proposes a general privilege control framework for LLM agents. Developers can define fine-grained policies specifying when certain tool calls are allowed, under what conditions, and what fallback actions to take if they are blocked. While our system focuses on static, fault-specific command filtering to block prohibited Kubernetes operations, Progent offers a domain-agnostic, modular approach that can be applied across various agent environments and threat models.
+
+(this is very similar to our idea, not sure if i should inclde the comparison part)
