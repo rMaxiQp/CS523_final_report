@@ -1,15 +1,28 @@
-\section{Implementation}
+\section{Design}
 
-You can have as many middle sections as possible based on your organization of the report.
-\subsection{code/idea explanation}
-\subsection{case study 1- port misconfig}
-general stats:
-Trigger rate@10: 5/10
-    Triggered both: 373, 758, 208, 
-    Triggered one: 741, 331
-    Not triggered: 908, 333, 642, 599, 468
-Success rate: 8/10
-analysis of trigger - immutable resource or destructive command. what happened in each case, and 
+In this section, we discuss the design and implementation of our safety guardrails.
 
-\subsection{case study 2}
-\subsection{case study 2}
+\subsection{Background}
+
+We assume agents are fundamentally benign, but might issue unnecessary commands that can be potentially destructive. But enforcing human verification on all operations diminishes the efficiency of AIOps. We want to balance agent autonomy with system safety. However, ensuring agents' reliability in generic use case is difficult, and we want to apply some constraints to make the problem more approachable. We want to study agents' reliability under the context of AIOpsLab, a holistic framework for AI agents evaluation. This framework benchmarks AI agents' accuracy and efficiency.
+
+\subsection{Intuition}
+
+We want to enforce agents to operate on mutable resources without the help of restricted commands.
+
+\paragraph{Mutable Resource} AIOpsLab generates determined scenarios, called \textit{Problem}, to ask agents to complete a specific task, e.g. error localization. In the process of generating problem (figure (TODO: insert AIOpsLab infrastructure figure)), the framework creates a functioning cluster, and inject faults into designated resource. For example, the framework intentionally modify a pod's port configuration to simulate pod misconfiguration. Therefore, resources that framework touches upon are potentially faulty, and they are considered mutable.
+
+\paragraph{Restricted Command} Each problem has a known scope, and it corresponds to a list of potential commands to address the issue. Using the port misconfiguration example, deleting or restarting the pod will not resolve the issue, but will bring down the pod for a period of time. These operations damage system's availability for no benefit.
+
+% We want to to balance agent autonomy with system safety by introducing lightweight, context-aware guardrails. The system assumes agents are fundamentally benign, but might issue unnecessary commands that can be potentially destructive. We don’t restrict any read commands, as they don’t pose any risk, and allows the agent to gain contextual information. 
+
+% Furthermore, faults are injected into the system through modifying some elements. Intuitively, since these elements were modified, they naturally should be changed during the fault mitigation process. These elements are considered "mutables", and anything  not in the mutable list should not be changed by the agent. 
+
+
+\subsection{Implementation}
+
+In order to enhance the observability and traceability of fault injection operations across the system, we introduced a structured return mechanism across all fault injection methods. Specifically, these methods now return a list of mutable elements that were affected by the fault injection. This change allows the orchestrator to store these modified elements in a session context. 
+
+In the execution time, the session's mutable objects are passed to shell for execution. Before executing the command passed by the agent, a command validation function first dry runs the command to see the resource it targets, and checks whether that resource is in the mutable list. If the command attempts to modify an element that's not in the mutable list, the system blocks it with "permission denied" error. This verification enables session-level guardrails to enforce context-aware resource validation. 
+
+Furthermore, we strengthened the guardrail by introducing a forbidden pattern filter, which explicitly blocks high-risk commands depending on the context of the fault injected. For example, a port misconfiguration problem doesn't need commands like delete pod or rollout restart to resolve the issue. These types of destructive or cluster-level operations go beyond the intended scope of the fault and can introduce unnecessary disruption. By explicitly blocking such commands through forbidden pattern checks, the system ensures that agents and users operate strictly within the context of the injected fault and only modify the relevant mutable resources, preserving system stability while enabling targeted mitigation.

@@ -9,9 +9,9 @@ While AIOpsLab established the feasibility of LLM-based fault remediation, it op
 The two main approaches to verify LLM generated outputs. In pre-facto validation, actions are checked and approved before execution, and post-facto validation, actions are allowed to run but their effects are later reviewed or contained.
 While pre-facto validation works to increase the system’s usability, it relies on human input, which limits its feasibility in practice. The GOEX runtime environment \cite{patil2024goexperspectivesdesignsruntime} suggests a promising shift toward post-facto validation using the concepts of undo and damage confinement. Specifically, damage confinement is achieved through coarse-grained access control mechanisms that limit the scope of LLM actions, ensuring they operate only within predefined boundaries and reducing the potential impact of unintended behavior.
 
-(should i tie this back to our work where we implemented a simliar idea of confinment/ restriction)
+(should i tie this back to our work where we implemented a similar idea of confinement/ restriction)
 
 
 The principle of least knowledge is also used in \cite{shi2025progent} which proposes a general privilege control framework for LLM agents. Developers can define fine-grained policies specifying when certain tool calls are allowed, under what conditions, and what fallback actions to take if they are blocked. While our system focuses on static, fault-specific command filtering to block prohibited Kubernetes operations, Progent offers a domain-agnostic, modular approach that can be applied across various agent environments and threat models.
 
-(this is very similar to our idea, not sure if i should inclde the comparison part)
+(this is very similar to our idea, not sure if i should include the comparison part)
