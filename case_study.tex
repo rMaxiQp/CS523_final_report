@@ -7,34 +7,83 @@ In this section, we prove the safety guardrail's effectiveness in practice. Due 
 
 \subsection{Misconfigure service port in Kubernetes}
 
-A port misconfiguration araises from an incorrect port assignment. It is a common error, yet leading to broken communication between services, damaging service availability. As the fix, the operator can use patch the node with the correct port number. Importantly, these faults do not inherently require the termination or redeployment of the underlying workloads.
+A port misconfiguration arises from an incorrect port assignment. It is a common error, and it leads to broken communication between services, damaging service availability.
+
+\subsubsection{Patch the erroneous service port}
+
+As the fix, the operator can use patch the node with the correct port number. Importantly, these faults do not inherently require the termination or redeployment of the underlying workloads. Therefore, we forbid kubectl commands \texttt{delete} and \texttt{rollout}. \texttt{kubectl delete} destroys resources without startup. For example, \texttt{kubectl delete pod geo-523} would remove \textit{pod/geo-523} from the cluster. This approach resolves the issue by removing the problematic resource, and it permanently damage the service's availability. On the other hand, \texttt{kubectl rollout} triggers a redeployment. Port misconfiguration issue will persist after the pod restart and redeployment introduce service down-time by nature. Together, these restrictions help ensure that the mitigation logic remains focused on the specific, localized aspects of the fault.
 
 % A port misconfiguration typically arises from an incorrect port number, which can usually be corrected through patching or updating resource definitions. Importantly, these faults do not inherently require the termination or redeployment of the underlying workloads.
 
-In the context of port misconfiguration, we chose to forbid commands delete and rollout. \texttt{kubectl delete pod}  destroys resources at a fundamental level, removing the pod from the cluster. While this forces Kubernetes to reschedule a new pod, it's an unnecessarily destructive command, and resolve the fault by masking the underlying misconfiguration by replacing it with a clean state. Similarly, the \texttt{kubectl rollout restart}  command, which forces a restart of a deployment, was forbidden because it acts at too broad a level. Together, these restrictions help ensure that the mitigation logic remains focused on the specific, localized aspects of the fault. 
+% In the context of port misconfiguration, we chose to forbid commands delete and rollout. \texttt{kubectl delete pod} destroys resources at a fundamental level, removing the pod from the cluster. While this forces Kubernetes to reschedule a new pod, it's an unnecessarily destructive command, and resolve the fault by masking the underlying misconfiguration by replacing it with a clean state. Similarly, the \texttt{kubectl rollout restart}  command, which forces a restart of a deployment, was forbidden because it acts at too broad a level. Together, these restrictions help ensure that the mitigation logic remains focused on the specific, localized aspects of the fault. 
 
-In this case study, we ran the guardrail on the problem  \texttt{misconfig\_app\_hotel\_res-mitigation-1} ten times to assess trigger rate, success rate, and perform analysis of trigger. 
+\subsubsection{Performance evaluation}
 
-\textbf{Trigger rate@10:} 6/10 
+We install the guardrail on the problem \\ \texttt{misconfig\_app\_hotel\_res-mitigation-1}, and ask the agent to solve the problem 20 times to assess trigger rate, and success rate. This is compared against the baseline scenario where no guardrail was applied, evaluated across 5 trials.
 
-\textbf{Success rate:} 5/10
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+ & \textbf{Trigger rate} & \textbf{Success rate} \\
+\hline
+Before guardrail & N/A & 0\% (0/5) \\
+\hline
+After guardrail & 65\% (13/20) & 25\% (5/20) \\
+\hline
+\end{tabular}
+\caption{Trigger and success rate before and after guardrail for Misconfigure service port in Kubernetes}
+\label{tab:misconfig}
+\end{table}
+The success rate is defined as the proportion of trials in which the agent successfully mitigated the fault, achieving the intended system recovery. The trigger rate measures how often the agent attempted to issue forbidden commands,  activating the guardrail to return an error and block the unsafe action. 
 
-In the port misconfiguration case study, the safety guardrail was triggered 60\% across 10 trails. The trials where triggers occurred frequently involved the agent attempting to execute both destructive commands  \texttt{delete pod} and \texttt{rollout restart}, which were correctly identified and blocked by the system’s guardrails.
+Table~\ref{tab:misconfig} illustrates the effect of the guardrail. Without the guardrail, the agent was unable to successfully resolve the fault in any of the five trials. In contrast, after installing the guardrail, the agent achieved a 25\% success rate despite triggering forbidden commands in 65\% of the runs. 
+We noticed that the trials where triggers occurred frequently involved the agent attempting to execute both destructive commands  \texttt{delete pod} and \texttt{rollout restart}, which were correctly identified and blocked by the system’s guardrails. These results suggest that the guardrail not only prevented unsafe operations, but also enforced a more constrained action space that challenged the agent to discover safer mitigation strategies.
 
 
-\subsection{Assign to non-existent or NotReady node}
-In this problem, the fault is injected by assigning the workload’s nodeSelector to a node that does not exist  in the Kubernetes cluster. As a result, pods remain perpetually in the Pending state because the Kubernetes scheduler cannot find any matching node.
+\subsection{Assign to non-existent or Not-Ready node}
 
-Correct mitigation requires removing the invalid nodeSelector to allow the scheduler to target eligible nodes. Importantly, this correction must occur at the Deployment template level. In practice, we noticed that Kubernetes treats a pod’s nodeSelector field as immutable once instantiated; therefore, any attempt to patch the field directly at the pod level will fail with an immutability error. 
+In Kubernetes, you can constrain a pod to run on particular node(s) using label selectors. One of them is called \texttt{nodeSelector}, it matches against node labels. In case of a typo in the node label, pods will remain perpetually in the Pending state since the Kubernetes scheduler cannot find any matching node.
 
-The correct mitigation behavior that performs the minimum necessary change is to patch at the deployment level by removing the invalid nodeSelector from the Deployment’s pod template. Kubernetes automatically detects this change and triggers a rollout of new pods that follow the updated template. In the context of this problem, we blocked the commands \texttt{delete} and \texttt{label}. Similar to case 1, \texttt{delete} is an overly destructive operation that was not necessary to mitigate the fault. In addition, it does not address the problematic underlying deployment configuration but merely removes the affected pod. The \texttt{label} command modifies labels on Kubernetes resources. In the context of this problem, the pod is unschedulable because its nodeSelector references a node name that doesn’t exist. To mitigate this, an agent might attempt to relabel an existing node with the missing node’s name. Rather than fixing the Deployment spec, this approach changes the cluster’s infrastructure to “match” the bad configuration and could introduce unintended side effects across the cluster.
+\subsubsection{Update the deployment configuration}
 
-In this case study, we ran the guardtail on the problem \texttt{assign\_to\_non\_existent\_node\_social\_net-mitigation-1}
+ One fix is to remove the invalid \texttt{nodeSelector}, allowing the scheduler to assign pods to eligible nodes. Kubernetes treats a pod’s \texttt{nodeSelector} field as immutable once instantiated; therefore, any attempt to patch the field directly at the pod level will fail with an immutability error. However, the corresponding deployment can be updated. This mitigation needs to address the fix on the corresponding deployment resource. The correct and minimal impact solution is to patch at the deployment level by removing the invalid \texttt{nodeSelector} from the Deployment’s pod template. Kubernetes automatically detects this change and triggers a rollout of new pods that follow the updated template. In the context of this problem, we believe commands \texttt{delete} and \texttt{label} only contribute negative impact to the problem, and we forbid their usage. Similar to the first case study's reasoning, \texttt{kubectl delete} is an overly destructive operation masks off the fault without a proper fix. \texttt{kubectl label} is used to modify labels on Kubernetes resources. We observe agents may use this command to relabel an existing node into the missing node's name. This approach may cascade the non-existent node issue to other resources in the cluster.
 
-\textbf{Trigger rate@10:} 4/10
-%Triggered: 287 (delete pod,success =false), 038(delete pod), 158 (delete, success =false), 602 (delete,success =false)
-%Not triggered: 539, 658, 163, 131, 685, 274
+% In this problem, the fault is injected by assigning the workload’s nodeSelector to a node that does not exist in the Kubernetes cluster. As a result, pods 
 
-\textbf{Success rate:} 7/10
+% Correct mitigation requires removing the invalid nodeSelector to allow the scheduler to target eligible nodes. Importantly, this correction must occur at the Deployment template level. In practice, we noticed that Kubernetes treats a pod’s nodeSelector field as immutable once instantiated; therefore, any attempt to patch the field directly at the pod level will fail with an immutability error. 
 
-By studying the four logs that triggered the guardrail, we observed that in each case the agent attempted to invoke a \texttt{kubectl delete} command. In three of these cases, the deletion command was accompanied by a failure to successfully mitigate the fault, as the agent failed to identify an alternative, non-destructive resolution path after the command was rejected. In contrast, the six logs that did not trigger the guardrail either avoided issuing any deletion commands or employed alternative commands (e.g., \texttt{kubectl patch deployment}) that directly addressed the faulty \texttt{nodeSelector} field in the Deployment specification. These findings suggest that while the guardrail effectively prevented destructive operations, its presence also challenged the agent to discover less aggressive mitigation strategies. In instances where the agent failed post-trigger, it lacked sufficient logic or number of steps to pivot to a declarative fix. Therefore, the guardrail both improved operational safety and exposed limitations in the agent's fallback behavior following prohibited actions.
+
+% In the context of this problem, we blocked the commands \texttt{delete} and \texttt{label}. Similar to case 1, \texttt{delete} is an overly destructive operation that was not necessary to mitigate the fault. In addition, it does not address the problematic underlying deployment configuration but merely removes the affected pod. The \texttt{label} command modifies labels on Kubernetes resources. The pod is unschedulable because its \texttt{nodeSelector} references a node name that doesn’t exist. To mitigate this, an agent might attempt to relabel an existing node with the missing node’s name. Rather than fixing the Deployment spec, this approach changes the cluster’s infrastructure to “match” the bad configuration and could introduce unintended side effects across the cluster.
+
+\paragraph{Performance evaluation}
+
+We install the guardrail on the problem \\ \texttt{assign\_to\_non\_existent\_node\_social\_net-mitigation-1}
+
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+ & \textbf{Trigger rate} & \textbf{Success rate} \\
+\hline
+Before guardrail & N/A & 40\% (2/5) \\
+\hline
+After guardrail & 60\% (12/20) & 65\% (13/20) \\
+\hline
+\end{tabular}
+\caption{Trigger and success rate before and after guardrail for Assign to non-existent or Not-ready Node}
+\label{tab:node}
+\end{table}
+
+As shown in Table \ref{tab:node}, the success rate was 40\% across 5 trials prior to the guardrail. After installing the guardrail, success rate improved to 65\% while blocking unsafe commands in 60\% of the runs.
+
+Out of the 20 experimental trials, the 8 runs where the guardrail was not triggered achieved a perfect success rate of 100\%, while the 12 runs that triggered the guardrail showed a lower success rate of 42\%.
+
+ By studying the twelve logs that triggered the guardrail, we observed that in each case the agent attempted to invoke a \texttt{kubectl delete} command or \texttt{kubectl label} command. In seven of these cases, the forbidden commands were accompanied by a failure to mitigate the fault, which accounted for 100\% of the failed cases.  We notice that the agent failed to identify an alternative resolution after the command was rejected within ten steps. 
+ 
+ In contrast, the eight logs that did not trigger the guardrail avoided issuing any forbidden commands to employ alternative commands (e.g., \texttt{kubectl patch deployment}) that directly addressed the faulty \texttt{nodeSelector} field in the Deployment specification. 
+
+
+
+These findings suggest that while the guardrail effectively prevented destructive operations, its presence also challenged the agent to discover less aggressive mitigation strategies. In instances where the agent failed post-trigger, it lacked sufficient logic or number of steps to pivot to a declarative fix. Therefore, the guardrail both improved operational safety and exposed limitations in the agent's fallback behavior following prohibited actions.
